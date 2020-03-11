@@ -150,6 +150,7 @@ pdf.convert().then(function() {
                 console.log(line.textContent);
             } else if(lineType === 'line' && italic) {
                 // apparatuses or comment?
+                // what if line is italic but part of the letter
             } else if(lineType === 'line') {
                 lineGroup.push(line.textContent);
                 console.log(line.textContent);
