@@ -1,0 +1,19 @@
+{
+  "name": "pdf",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "inlinecss": "^1.1.5",
+    "jsdom": "^16.2.1",
+    "moment": "^2.24.0",
+    "pdftohtmljs": "^0.5.3",
+    "uuid-random": "^1.3.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "MIT"
+}
