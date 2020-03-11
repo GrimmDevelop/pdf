@@ -35,7 +35,7 @@ pdf.add_options([
 ]);
 
 pdf.convert().then(function() {
-    console.log("Generated raw html output");
+    console.log("Generated raw html output [" + path + "/" + outputFile + "]");
 
     return new Promise(function(resolve, reject) {
         let html = fs.readFileSync(path + "/" + outputFile).toString();
@@ -56,14 +56,16 @@ pdf.convert().then(function() {
 
     // convert css classes etc to inline css
     return new Promise(function(resolve, reject) {
-        inlineCSS.inlineFile(path + "/" + outputFile, path + "/" + inlineFile, resolve);
+        inlineCSS.inlineFile(path + "/" + outputFile, path + "/" + inlineFile, {
+            removeAttributes: false,
+        }, resolve);
     });
 }).then(function() {
-    console.log("Parsed raw html an generated inline css");
+    console.log("Parsed raw html and generated inline css [" + path + "/" + inlineFile + "]");
 
     let document = new JSDOM(fs.readFileSync(path + "/" + inlineFile).toString()).window.document;
 
-    let pages = document.querySelectorAll('body > div > div > div');
+    let pages = document.querySelectorAll('body > div#page-container > div > div');
 
     let familyMap = {
         'ff1': 'italic',
@@ -78,10 +80,31 @@ pdf.convert().then(function() {
         155: 'new-paragraph',
     };
 
+    // use state machine
+    //  - current chapter
+    //  - current letter
+    //  - position inside letter (date, title, paragraph, apparatus, ...)
+    //  - parse next line in document and decide based on current position
+
+    // find chapters
+    // find start/title of letter
+    // extract date
+    // extract opener
+    // extract paragraphs and line breaks
+    // drop line numbers
+    // extract salute
+    // extract signature
+    // skip apparatuses and comments
+    // processes next letter
+
+    let letters = [];
+
+    let letter, lineGroup;
+
     pages.forEach(function(page) {
         page.childNodes.forEach(function(line, index) {
             if(index === 0) {
-                console.log('')
+                console.log('');
                 console.log('=========== new page ===========');
             }
 
@@ -91,9 +114,53 @@ pdf.convert().then(function() {
 
             let left = Math.round(parseFloat(line.style.left));
 
-            console.log(line.textContent, left, leftMap[left]);
+            let lineType = leftMap[left];
+
+            let normal = line.classList.contains('ff2');
+            let italic = line.classList.contains('ff1');
+            let bold = line.classList.contains('ff3');
+
+            if(!(bold && lineType === 'line') && !letter) {
+                return;
+            }
+
+            if(bold && lineType === 'line') {
+                console.log(line.textContent);
+                if(letter) {
+                    letters.push(letter);
+                }
+
+                letter = {
+                    title: line.textContent,
+                    lines: [],
+                    apparatuses: null,
+                    comments: null,
+                };
+
+                lineGroup = [];
+            } else if(lineType === 'new-paragraph') {
+                if(lineGroup.length > 0) {
+                    letter.lines.push(lineGroup);
+                }
+
+                lineGroup = [];
+
+                lineGroup.push(line.textContent);
+                console.log(line.textContent);
+            } else if(lineType === 'line' && italic) {
+                // apparatuses or comment?
+            } else if(lineType === 'line') {
+                lineGroup.push(line.textContent);
+                console.log(line.textContent);
+            }
         });
     });
+
+    if(letter) {
+        letters.push(letter);
+    }
+
+    console.log(letters);
 }).catch(function(err) {
     console.log(err);
 });
