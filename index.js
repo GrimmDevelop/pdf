@@ -22,6 +22,7 @@ let pdf = Converter(input, outputFile, {
     bin: './php2htmlEX.sh',
 });
 
+// for testing only parse page 187 and 188
 pdf.add_options([
     "--dest-dir " + path,
     "--fit-width 968",
