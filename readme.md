@@ -4,7 +4,7 @@
 ## Requirements
 
 * Docker
-* Node.js 13 or newer
+* Node.js 13.10.0 or newer
 
 ## Installation
 
@@ -13,6 +13,6 @@
 
 ## Usage
 
-* provide a valid pdf file: <pdf> is path to pdf
+* provide a valid pdf file: &lt;pdf&gt; is path to pdf
 * run `node index.js <pdf>`
 * first run will take some time as docker has to pull the image
