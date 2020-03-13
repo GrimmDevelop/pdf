@@ -23,4 +23,6 @@ The format of the XML file corresponds to the standard according to TEI and DTAB
 
 http://www.deutschestextarchiv.de/doku/basisformat/uebersichtText.html
 
+http://www.deutschestextarchiv.de/doku/basisformat/typogrAllg.html
+
 https://tei-c.org/
