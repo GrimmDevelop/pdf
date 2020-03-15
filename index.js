@@ -155,8 +155,14 @@ pdf.convert().then(function () {
                 // apparatuses or comment?
                 // what if line is italic but part of the letter
             } else if (lineType === 'line') {
-                paragraph.push(line.textContent);
                 console.log(line.textContent);
+                paragraph.push(line.textContent);
+            } else if (lineType === 'line-number') {
+                // skip line numbers
+            } else {
+                // unknown line indent -> probably right aligned text
+                console.log(line.textContent);
+                paragraph.push(`<hi redention="#right">${line.textContent}</hi>`);
             }
         });
     });
