@@ -1,8 +1,6 @@
 const fs = require("fs");
 const Converter = require('pdftohtmljs');
-const uuid = require('uuid-random');
-const inlineCSS = require('inlinecss');
-const moment = require('moment');
+const inlineCSS = require('inline-css');
 const jsdom = require("jsdom");
 const {JSDOM} = jsdom;
 
@@ -16,8 +14,10 @@ let input = process.argv[2];
 let path = 'output';
 let outputFile = 'raw.html';
 
+let bin = '.\\php2htmlEX.bat'; // TODO: detect OS and use .sh or .bat
+
 let pdf = Converter(input, outputFile, {
-    bin: './php2htmlEX.sh',
+    bin,
 });
 
 // for testing only parse page 187 and 188
@@ -28,9 +28,9 @@ pdf.add_options([
     "-l 188",
     "--optimize-text 5",
     "--printing 0",
-    "--embed-css 0",
-    "--embed-font 0",
-    "--embed-javascript 0",
+    //"--embed-css 0",
+    //"--embed-font 0",
+    //"--embed-javascript 0",
 ]);
 
 pdf.convert().then(function () {
@@ -60,10 +60,10 @@ pdf.convert().then(function () {
     console.log("Converting pdf2htmlEX generated css to inline css");
 
     return new Promise(function (resolve) {
-        inlineCSS.inlineHtml(html, {
-            removeAttributes: false,
-        }, function (html) {
-            resolve(html);
+        inlineCSS(html, { url: ' '}).then(function (html) {
+            fs.writeFile('output/inline.html', html, function() {
+                resolve(html);
+            });
         });
     });
 }).then(function (html) {
@@ -92,12 +92,8 @@ pdf.convert().then(function () {
 
     // find chapters
     // find start/title of letter
-    // extract date
-    // extract opener
     // extract paragraphs and line breaks
     // drop line numbers
-    // extract salute
-    // extract signature
     // skip apparatuses and comments
     // processes next letter
 
@@ -129,6 +125,7 @@ pdf.convert().then(function () {
             }
 
             if (bold && lineType === 'line') {
+                // letter title -> create new letter object
                 console.log(line.textContent);
                 if (letter) {
                     letters.push(letter);
@@ -155,12 +152,13 @@ pdf.convert().then(function () {
                 // apparatuses or comment?
                 // what if line is italic but part of the letter
             } else if (lineType === 'line') {
-                console.log(line.textContent);
+                console.log(line.textContent, line.style.wordSpacing, line.style.letterSpacing);
                 paragraph.push(line.textContent);
             } else if (lineType === 'line-number') {
                 // skip line numbers
             } else {
                 // unknown line indent -> probably right aligned text
+                // does not detect indented text with left alignment
                 console.log(line.textContent);
                 paragraph.push(`<hi redention="#right">${line.textContent}</hi>`);
             }
