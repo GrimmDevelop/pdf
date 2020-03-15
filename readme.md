@@ -7,7 +7,7 @@
 
 ## Installation
 
-* run `chmod +x ./php2htmlEX.sh`
+* run `chmod +x ./pdf2htmlEX.sh`
 * run `npm ci`
 
 ## Usage
