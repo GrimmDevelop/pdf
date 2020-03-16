@@ -14,7 +14,8 @@ let input = process.argv[2];
 let path = 'output';
 let outputFile = 'raw.html';
 
-let bin = '.\\php2htmlEX.bat'; // TODO: detect OS and use .sh or .bat
+//check if OS is Win, to use *.bat, else *.sh
+let bin = process.platform.toUpperCase().indexOf('WIN')>=0 ? '.\\pdf2htmlEX.bat' : '.\\pdf2htmlEX.sh';
 
 let pdf = Converter(input, outputFile, {
     bin,
