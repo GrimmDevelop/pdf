@@ -14,7 +14,7 @@ let input = process.argv[2];
 let path = 'output';
 let outputFile = 'raw.html';
 
-//check if OS is Win, to use *.bat, else *.sh
+// check if OS is Win, to use *.bat, else *.sh
 let bin = process.platform.toUpperCase().indexOf('WIN')>=0 ? '.\\pdf2htmlEX.bat' : '.\\pdf2htmlEX.sh';
 
 let pdf = Converter(input, outputFile, {
@@ -149,11 +149,17 @@ pdf.convert().then(function () {
 
                 paragraph.push(line.textContent);
                 console.log(line.textContent);
-            } else if (lineType === 'line' && italic) {
-                // apparatuses or comment?
-                // what if line is italic but part of the letter
+            } else if ((line.textContent.includes('Empfängertext:') || line.textContent.includes('Datierung:') ||
+                        line.textContent.includes('Überlieferung:')) && lineType === 'line') {
+                // apparatuses
+                // will always start with one of those words.
+                // statemaschiene should ignore everithing until the next letter starts
+            } else if (line.textContent.includes('Sachkommentar:') && lineType === 'line') {
+                // comments
+                // will always start with this word.
+                // statemaschiene should ignore everithing until the next letter starts
             } else if (lineType === 'line') {
-                console.log(line.textContent, line.style.wordSpacing, line.style.letterSpacing);
+                console.log(line.textContent);
                 paragraph.push(line.textContent);
             } else if (lineType === 'line-number') {
                 // skip line numbers
