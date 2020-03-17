@@ -1,4 +1,4 @@
-import {Machine, interpret} from 'xState';
+import {interpret} from 'xstate';
 const fs = require("fs");
 const Converter = require('pdftohtmljs');
 const inlineCSS = require('inline-css');
@@ -96,72 +96,7 @@ pdf.convert().then(function () {
   // - actions
   // - XState (all XState exports)
   
-  const fetchMachine = Machine({
-    id: 'letters',
-    initial: 'start',
-    context: {
-      chapter: 0,
-      letter: 0
-    },
-    states: {
-      start: {
-        on: {
-          CHAPTER: {
-            target: 'chapter',
-            actions: assign({
-              chapter: (context, event) => context.chapter + 1
-            })
-          }
-        }
-      },
-      chapter: {
-        on: {
-          TITLE: {
-            target: 'title',
-            actions: assign({
-              letter: (context, event) => 1
-            })
-          }
-        }
-      },
-      title: {
-        on: {
-          BODY: 'body'
-        }
-      },
-      body: {
-        on: {
-          APPARATUSES: 'apparatuses'
-        }
-      },
-      apparatuses: {
-        on: {
-          COMMENTS: 'comments'
-        }
-      },
-      comments: {
-        on: {
-          TITLE: {
-            target: 'title',
-            actions: assign({
-              letter: (context, event) => context.letter + 1
-            })
-          },
-          CHAPTER: {
-            target: 'chapter',
-            actions: assign({
-              chapter: (context, event) => context.chapter + 1,
-              letter: (context, event) => 1
-            })
-          },
-          END: 'end'
-        }
-      },
-      end: {
-        type: 'final'
-      }
-    }
-  });
+  const fetchMachine = require('./machine');
 
   const fetchService = interpret(fetchMachine).onTransition(state => console.log(state.value));
     // TODO:
@@ -182,57 +117,114 @@ pdf.convert().then(function () {
 
     let letter, paragraph;
 
-    fetchService.start();
-
-    pages.forEach(function (page) {
-        page.childNodes.forEach(function (line, index)) {
-            switch (fetchMachine.state.value) {
+    function checkLine(line){
+        switch (fetchMachine.state.value) {
                 case start:
-                    // do nothing until chapter starts
                     if (/*detection if chapter starts*/) {fetchService.send('CHAPTER');}
                     break;
                 case chapter:
-                    // get chapter name and id and search for letter start. ignore introductory text
-                    // when letter title is found start new letter
+                    //wir befinden uns im chapter und schauen ob die zeile ein titel ist. falls ja: change state
+                    //andere states analog
+                    // das meinte ich niucht,
+                    // direkt den title (also die line) an die state machine mitschicken
+                    // bei der analyse dann die state machine selber auswerten
                     if (bold && lineType === 'line') {
-                        fetchService.send('TITLE');
-                        if (letter) {
-                            letters.push(letter);
-                         }
-
-                        letter = {
-                        title: line.textContent,
-                        paragraphs: [],
-                        apparatuses: null,
-                        comments: null,
-                        };
-                        paragraph = [];
+                        fetchService.send('TITLE', line); // quasi so
                     }
                     break;
                 case title:
-                    // new letter was already created
-
+                    fetchService.send('BODY');
                     break;
                 case body:
-
+                    if ((line.textContent.includes('Empfängertext:') || line.textContent.includes('Datierung:') ||
+                        line.textContent.includes('Überlieferung:')) && lineType === 'line') {
+                        fetchService.send('APPARATUSES');
+                    }
                     break;
                 case apparatuses:
-
+                    if (line.textContent.includes('Sachkommentar:') && lineType === 'line') {
+                        fetchService.send('COMMENTS');
+                    }
                     break;
                 case comments:
-
+                    if (/* Chapter Name */) {
+                        fetchService.send('CHAPTER');
+                    } else if (bold && lineType === 'line') {
+                        fetchService.send('TITLE');
+                    } else if (/* EOF */) {
+                        fetchService.send('END');
+                    }
                     break;
                 case end:
 
                     break;
-            }
-        }
-    })
+    }
 
+    function processLine(line){
+        switch (fetchMachine.state.value) {
+                case start:
+                    // do nothing until chapter starts
+                    break;
+                case chapter:
+                    // get chapter name and id and search for letter start. ignore introductory text
+                    break;
+                case title:
+                    // get letter title and make new letter
+                    console.log(line.textContent);
+                    if (letter) {
+                            letters.push(letter);
+                    }
 
+                    letter = {
+                        title: line.textContent,
+                        paragraphs: [],
+                        apparatuses: null,
+                        comments: null,
+                    };
+                    paragraph = [];
+                    break;
+                case body:
+                    if (lineType === 'new-paragraph') {
+                        if (paragraph.length > 0) {
+                            letter.paragraphs.push(paragraph);
+                        }
 
-    pages.forEach(function (page) {
-        page.childNodes.forEach(function (line, index) {
+                        paragraph = [];
+
+                        paragraph.push(line.textContent);
+                        console.log(line.textContent);
+                    } else if (lineType === 'line') {
+                        console.log(line.textContent);
+                        paragraph.push(line.textContent);
+                    } else if (lineType === 'line-number') {
+                        // skip line numbers
+                    } else {
+                        // unknown line indent -> probably right aligned text
+                        // does not detect indented text with left alignment
+                        console.log(line.textContent);
+                        paragraph.push(`<hi redention="#right">${line.textContent}</hi>`);
+                    }
+                    break;
+                case apparatuses:
+                    // skip
+                    break;
+                case comments:
+                    // skip
+                    break;
+                case end:
+                    // This is the end, beautiful friend
+                    // This is the end, my only friend
+                    // The end of our elaborate plans    
+                    // The end of ev'rything that stands
+                    // The end                           -Jim Morrison 
+                    break;
+    }
+
+    fetchService.start();
+
+    // loop over all pages an lines
+    pages.forEach(function (page)) {
+        page.childNodes.forEach(function (line, index)) {
             if (index === 0) {
                 console.log('');
                 console.log('=========== new page ===========');
@@ -241,65 +233,83 @@ pdf.convert().then(function () {
             if (index < 2) {
                 console.log('page header or number');
             }
-
-            let left = Math.round(parseFloat(line.style.left));
-
-            let lineType = leftMap[left];
-
-            let normal = line.classList.contains('ff2');
-            let italic = line.classList.contains('ff1');
-            let bold = line.classList.contains('ff3');
-
-            if (!(bold && lineType === 'line') && !letter) {
-                return;
+            checkLine(line);
+            processLine(line);
             }
+        }
+    }
 
-            if (bold && lineType === 'line') {
-                // letter title -> create new letter object
-                console.log(line.textContent);
-                if (letter) {
-                    letters.push(letter);
-                }
 
-                letter = {
-                    title: line.textContent,
-                    paragraphs: [],
-                    apparatuses: null,
-                    comments: null,
-                };
 
-                paragraph = [];
-            } else if (lineType === 'new-paragraph') {
-                if (paragraph.length > 0) {
-                    letter.paragraphs.push(paragraph);
-                }
+    // pages.forEach(function (page) {
+    //     page.childNodes.forEach(function (line, index) {
+    //         if (index === 0) {
+    //             console.log('');
+    //             console.log('=========== new page ===========');
+    //         }
 
-                paragraph = [];
+    //         if (index < 2) {
+    //             console.log('page header or number');
+    //         }
 
-                paragraph.push(line.textContent);
-                console.log(line.textContent);
-            } else if ((line.textContent.includes('Empfängertext:') || line.textContent.includes('Datierung:') ||
-                        line.textContent.includes('Überlieferung:')) && lineType === 'line') {
-                // apparatuses
-                // will always start with one of those words.
-                // statemaschiene should ignore everithing until the next letter starts
-            } else if (line.textContent.includes('Sachkommentar:') && lineType === 'line') {
-                // comments
-                // will always start with this word.
-                // statemaschiene should ignore everithing until the next letter starts
-            } else if (lineType === 'line') {
-                console.log(line.textContent);
-                paragraph.push(line.textContent);
-            } else if (lineType === 'line-number') {
-                // skip line numbers
-            } else {
-                // unknown line indent -> probably right aligned text
-                // does not detect indented text with left alignment
-                console.log(line.textContent);
-                paragraph.push(`<hi redention="#right">${line.textContent}</hi>`);
-            }
-        });
-    });
+    //         let left = Math.round(parseFloat(line.style.left));
+
+    //         let lineType = leftMap[left];
+
+    //         let normal = line.classList.contains('ff2');
+    //         let italic = line.classList.contains('ff1');
+    //         let bold = line.classList.contains('ff3');
+
+    //         if (!(bold && lineType === 'line') && !letter) {
+    //             return;
+    //         }
+
+    //         if (bold && lineType === 'line') {
+    //             // letter title -> create new letter object
+    //             console.log(line.textContent);
+    //             if (letter) {
+    //                 letters.push(letter);
+    //             }
+
+    //             letter = {
+    //                 title: line.textContent,
+    //                 paragraphs: [],
+    //                 apparatuses: null,
+    //                 comments: null,
+    //             };
+
+    //             paragraph = [];
+    //         } else if (lineType === 'new-paragraph') {
+    //             if (paragraph.length > 0) {
+    //                 letter.paragraphs.push(paragraph);
+    //             }
+
+    //             paragraph = [];
+
+    //             paragraph.push(line.textContent);
+    //             console.log(line.textContent);
+    //         } else if ((line.textContent.includes('Empfängertext:') || line.textContent.includes('Datierung:') ||
+    //                     line.textContent.includes('Überlieferung:')) && lineType === 'line') {
+    //             // apparatuses
+    //             // will always start with one of those words.
+    //             // statemaschiene should ignore everithing until the next letter starts
+    //         } else if (line.textContent.includes('Sachkommentar:') && lineType === 'line') {
+    //             // comments
+    //             // will always start with this word.
+    //             // statemaschiene should ignore everithing until the next letter starts
+    //         } else if (lineType === 'line') {
+    //             console.log(line.textContent);
+    //             paragraph.push(line.textContent);
+    //         } else if (lineType === 'line-number') {
+    //             // skip line numbers
+    //         } else {
+    //             // unknown line indent -> probably right aligned text
+    //             // does not detect indented text with left alignment
+    //             console.log(line.textContent);
+    //             paragraph.push(`<hi redention="#right">${line.textContent}</hi>`);
+    //         }
+    //     });
+    // });
 
     if (letter) {
         letters.push(letter);
