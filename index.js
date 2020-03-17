@@ -1,3 +1,4 @@
+import {Machine, interpret} from 'xState';
 const fs = require("fs");
 const Converter = require('pdftohtmljs');
 const inlineCSS = require('inline-css');
@@ -84,6 +85,85 @@ pdf.convert().then(function () {
         155: 'new-paragraph',   // new paragraphs have a greater indent
     };
 
+    // Available variables:
+  // - Machine
+  // - interpret
+  // - assign
+  // - send
+  // - sendParent
+  // - spawn
+  // - raise
+  // - actions
+  // - XState (all XState exports)
+  
+  const fetchMachine = Machine({
+    id: 'letters',
+    initial: 'start',
+    context: {
+      chapter: 0,
+      letter: 0
+    },
+    states: {
+      start: {
+        on: {
+          CHAPTER: {
+            target: 'chapter',
+            actions: assign({
+              chapter: (context, event) => context.chapter + 1
+            })
+          }
+        }
+      },
+      chapter: {
+        on: {
+          TITLE: {
+            target: 'title',
+            actions: assign({
+              letter: (context, event) => 1
+            })
+          }
+        }
+      },
+      title: {
+        on: {
+          BODY: 'body'
+        }
+      },
+      body: {
+        on: {
+          APPARATUSES: 'apparatuses'
+        }
+      },
+      apparatuses: {
+        on: {
+          COMMENTS: 'comments'
+        }
+      },
+      comments: {
+        on: {
+          TITLE: {
+            target: 'title',
+            actions: assign({
+              letter: (context, event) => context.letter + 1
+            })
+          },
+          CHAPTER: {
+            target: 'chapter',
+            actions: assign({
+              chapter: (context, event) => context.chapter + 1,
+              letter: (context, event) => 1
+            })
+          },
+          END: 'end'
+        }
+      },
+      end: {
+        type: 'final'
+      }
+    }
+  });
+
+  const fetchService = interpret(fetchMachine).onTransition(state => console.log(state.value));
     // TODO:
     // use state machine (?)
     //  - current chapter
@@ -101,6 +181,55 @@ pdf.convert().then(function () {
     let letters = [];
 
     let letter, paragraph;
+
+    fetchService.start();
+
+    pages.forEach(function (page) {
+        page.childNodes.forEach(function (line, index)) {
+            switch (fetchMachine.state.value) {
+                case start:
+                    // do nothing until chapter starts
+                    if (/*detection if chapter starts*/) {fetchService.send('CHAPTER');}
+                    break;
+                case chapter:
+                    // get chapter name and id and search for letter start. ignore introductory text
+                    // when letter title is found start new letter
+                    if (bold && lineType === 'line') {
+                        fetchService.send('TITLE');
+                        if (letter) {
+                            letters.push(letter);
+                         }
+
+                        letter = {
+                        title: line.textContent,
+                        paragraphs: [],
+                        apparatuses: null,
+                        comments: null,
+                        };
+                        paragraph = [];
+                    }
+                    break;
+                case title:
+                    // new letter was already created
+
+                    break;
+                case body:
+
+                    break;
+                case apparatuses:
+
+                    break;
+                case comments:
+
+                    break;
+                case end:
+
+                    break;
+            }
+        }
+    })
+
+
 
     pages.forEach(function (page) {
         page.childNodes.forEach(function (line, index) {

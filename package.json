@@ -6,7 +6,8 @@
   "dependencies": {
     "inline-css": "^2.6.3",
     "jsdom": "^16.2.1",
-    "pdftohtmljs": "^0.5.3"
+    "pdftohtmljs": "^0.5.3",
+    "xstate": "^4.8.0"
   },
   "devDependencies": {},
   "scripts": {
