@@ -1,9 +1,9 @@
-import {interpret} from 'xstate';
 const fs = require("fs");
 const Converter = require('pdftohtmljs');
 const inlineCSS = require('inline-css');
 const jsdom = require("jsdom");
 const {JSDOM} = jsdom;
+const {interpret} = require('xstate');
 
 if (process.argv.length < 3) {
     console.log("please provide a valid pdf path");
@@ -16,7 +16,7 @@ let path = 'output';
 let outputFile = 'raw.html';
 
 // check if OS is Win, to use *.bat, else *.sh
-let bin = process.platform.toUpperCase().indexOf('WIN')>=0 ? '.\\pdf2htmlEX.bat' : '.\\pdf2htmlEX.sh';
+let bin = process.platform.toUpperCase().indexOf('WIN') >= 0 ? '.\\pdf2htmlEX.bat' : '.\\pdf2htmlEX.sh';
 
 let pdf = Converter(input, outputFile, {
     bin,
@@ -62,8 +62,8 @@ pdf.convert().then(function () {
     console.log("Converting pdf2htmlEX generated css to inline css");
 
     return new Promise(function (resolve) {
-        inlineCSS(html, { url: ' '}).then(function (html) {
-            fs.writeFile('output/inline.html', html, function() {
+        inlineCSS(html, {url: ' '}).then(function (html) {
+            fs.writeFile('output/inline.html', html, function () {
                 resolve(html);
             });
         });
@@ -76,29 +76,60 @@ pdf.convert().then(function () {
     console.log("Analysing document");
     console.log("");
 
-    let pages = document.querySelectorAll('body > div#page-container > div > div');
-
-    let leftMap = {
-        94: 'line-number',      // lno 10 or greater
-        101: 'line-number',     // lno 5
-        132: 'line',            // normal line indent
-        155: 'new-paragraph',   // new paragraphs have a greater indent
-    };
+    const {leftMap, keyWords} = require('./structure');
 
     // Available variables:
-  // - Machine
-  // - interpret
-  // - assign
-  // - send
-  // - sendParent
-  // - spawn
-  // - raise
-  // - actions
-  // - XState (all XState exports)
-  
-  const fetchMachine = require('./machine');
+    // - Machine
+    // - interpret
+    // - assign
+    // - send
+    // - sendParent
+    // - spawn
+    // - raise
+    // - actions
+    // - XState (all XState exports)
 
-  const fetchService = interpret(fetchMachine).onTransition(state => console.log(state.value));
+    const fetchMachine = require('./machine');
+
+    let chapters, chapter, letter, paragraph;
+
+    const fetchService = interpret(fetchMachine).onTransition(state => {
+        console.log("transition to", state.value);
+        switch (state.value) {
+            case "start":
+                chapters = [];
+                break;
+            case "chapter":
+                if (chapter) {
+                    chapters.push(chapter);
+                }
+
+                chapter = newChapter(state.context.chapter);
+                break;
+
+            case "title":
+                if (letter) {
+                    chapter.letters.push(letter);
+                }
+
+                letter = newLetter(state.context.letter);
+                break;
+
+            case "end":
+                if (chapter) {
+                    if (letter) {
+                        chapter.letters.push(letter);
+                    }
+
+                    chapters.push(chapter);
+                }
+                break;
+        }
+    }).start();
+
+    // fake new chapter
+    fetchService.send('CHAPTER');
+
     // TODO:
     // use state machine (?)
     //  - current chapter
@@ -113,218 +144,166 @@ pdf.convert().then(function () {
     // skip apparatuses and comments
     // processes next letter
 
-    let letters = [];
+    function checkLine(line) {
+        let lineType = type(line, leftMap);
+        let lineFont = font(line);
 
-    let letter, paragraph;
-
-    function checkLine(line){
-        switch (fetchMachine.state.value) {
-                case start:
-                    if (/*detection if chapter starts*/) {fetchService.send('CHAPTER');}
-                    break;
-                case chapter:
-                    //wir befinden uns im chapter und schauen ob die zeile ein titel ist. falls ja: change state
-                    //andere states analog
-                    // das meinte ich niucht,
-                    // direkt den title (also die line) an die state machine mitschicken
-                    // bei der analyse dann die state machine selber auswerten
-                    if (bold && lineType === 'line') {
-                        fetchService.send('TITLE', line); // quasi so
-                    }
-                    break;
-                case title:
-                    fetchService.send('BODY');
-                    break;
-                case body:
-                    if ((line.textContent.includes('Empfängertext:') || line.textContent.includes('Datierung:') ||
-                        line.textContent.includes('Überlieferung:')) && lineType === 'line') {
-                        fetchService.send('APPARATUSES');
-                    }
-                    break;
-                case apparatuses:
-                    if (line.textContent.includes('Sachkommentar:') && lineType === 'line') {
-                        fetchService.send('COMMENTS');
-                    }
-                    break;
-                case comments:
-                    if (/* Chapter Name */) {
-                        fetchService.send('CHAPTER');
-                    } else if (bold && lineType === 'line') {
-                        fetchService.send('TITLE');
-                    } else if (/* EOF */) {
-                        fetchService.send('END');
-                    }
-                    break;
-                case end:
-
-                    break;
-    }
-
-    function processLine(line){
-        switch (fetchMachine.state.value) {
-                case start:
-                    // do nothing until chapter starts
-                    break;
-                case chapter:
-                    // get chapter name and id and search for letter start. ignore introductory text
-                    break;
-                case title:
-                    // get letter title and make new letter
-                    console.log(line.textContent);
-                    if (letter) {
-                            letters.push(letter);
-                    }
-
-                    letter = {
-                        title: line.textContent,
-                        paragraphs: [],
-                        apparatuses: null,
-                        comments: null,
-                    };
-                    paragraph = [];
-                    break;
-                case body:
-                    if (lineType === 'new-paragraph') {
-                        if (paragraph.length > 0) {
-                            letter.paragraphs.push(paragraph);
-                        }
-
-                        paragraph = [];
-
-                        paragraph.push(line.textContent);
-                        console.log(line.textContent);
-                    } else if (lineType === 'line') {
-                        console.log(line.textContent);
-                        paragraph.push(line.textContent);
-                    } else if (lineType === 'line-number') {
-                        // skip line numbers
-                    } else {
-                        // unknown line indent -> probably right aligned text
-                        // does not detect indented text with left alignment
-                        console.log(line.textContent);
-                        paragraph.push(`<hi redention="#right">${line.textContent}</hi>`);
-                    }
-                    break;
-                case apparatuses:
-                    // skip
-                    break;
-                case comments:
-                    // skip
-                    break;
-                case end:
-                    // This is the end, beautiful friend
-                    // This is the end, my only friend
-                    // The end of our elaborate plans    
-                    // The end of ev'rything that stands
-                    // The end                           -Jim Morrison 
-                    break;
-    }
-
-    fetchService.start();
-
-    // loop over all pages an lines
-    pages.forEach(function (page)) {
-        page.childNodes.forEach(function (line, index)) {
-            if (index === 0) {
-                console.log('');
-                console.log('=========== new page ===========');
-            }
-
-            if (index < 2) {
-                console.log('page header or number');
-            }
-            checkLine(line);
-            processLine(line);
-            }
+        switch (fetchService.state.value) {
+            case "chapter":
+            case "comments":
+                if (lineFont === 'bold' && lineType === 'line') {
+                    fetchService.send('TITLE');
+                }
+                break;
+            case "title":
+                fetchService.send('BODY');
+                break;
+            case "body":
+                if (keyWords.apparatuses.some((keyWord) => line.textContent.includes(keyWord))) {
+                    fetchService.send('APPARATUSES');
+                }
+                break;
+            case 'apparatuses':
+                if (keyWords.comments.some((keyWord) => line.textContent.includes(keyWord))) {
+                    fetchService.send('COMMENTS');
+                }
+                break;
         }
     }
 
+    let pages = document.querySelectorAll('body > div#page-container > div > div');
 
+    // loop over all pages an lines
+    pages.forEach(function (page) {
 
-    // pages.forEach(function (page) {
-    //     page.childNodes.forEach(function (line, index) {
-    //         if (index === 0) {
-    //             console.log('');
-    //             console.log('=========== new page ===========');
-    //         }
+        if (isNewChapter(page)) {
+            fetchService.send('CHAPTER');
+        }
 
-    //         if (index < 2) {
-    //             console.log('page header or number');
-    //         }
+        console.log('');
+        console.log('=========== new page ===========');
 
-    //         let left = Math.round(parseFloat(line.style.left));
+        page.childNodes.forEach(function (line, index) {
+            if (index < 2) { //TODO: is this always right?
+                console.log('page header or number');
+            } else {
+                // detect state change
+                checkLine(line);
 
-    //         let lineType = leftMap[left];
+                // add line
+                if (letter.hasOwnProperty(fetchService.state.value)) {
+                    letter[fetchService.state.value].push(line);
+                }
 
-    //         let normal = line.classList.contains('ff2');
-    //         let italic = line.classList.contains('ff1');
-    //         let bold = line.classList.contains('ff3');
+                // processLine(line);
+            }
+        });
+    });
 
-    //         if (!(bold && lineType === 'line') && !letter) {
-    //             return;
-    //         }
+    fetchService.send('END');
 
-    //         if (bold && lineType === 'line') {
-    //             // letter title -> create new letter object
-    //             console.log(line.textContent);
-    //             if (letter) {
-    //                 letters.push(letter);
-    //             }
-
-    //             letter = {
-    //                 title: line.textContent,
-    //                 paragraphs: [],
-    //                 apparatuses: null,
-    //                 comments: null,
-    //             };
-
-    //             paragraph = [];
-    //         } else if (lineType === 'new-paragraph') {
-    //             if (paragraph.length > 0) {
-    //                 letter.paragraphs.push(paragraph);
-    //             }
-
-    //             paragraph = [];
-
-    //             paragraph.push(line.textContent);
-    //             console.log(line.textContent);
-    //         } else if ((line.textContent.includes('Empfängertext:') || line.textContent.includes('Datierung:') ||
-    //                     line.textContent.includes('Überlieferung:')) && lineType === 'line') {
-    //             // apparatuses
-    //             // will always start with one of those words.
-    //             // statemaschiene should ignore everithing until the next letter starts
-    //         } else if (line.textContent.includes('Sachkommentar:') && lineType === 'line') {
-    //             // comments
-    //             // will always start with this word.
-    //             // statemaschiene should ignore everithing until the next letter starts
-    //         } else if (lineType === 'line') {
-    //             console.log(line.textContent);
-    //             paragraph.push(line.textContent);
-    //         } else if (lineType === 'line-number') {
-    //             // skip line numbers
-    //         } else {
-    //             // unknown line indent -> probably right aligned text
-    //             // does not detect indented text with left alignment
-    //             console.log(line.textContent);
-    //             paragraph.push(`<hi redention="#right">${line.textContent}</hi>`);
-    //         }
-    //     });
-    // });
-
-    if (letter) {
-        letters.push(letter);
-    }
-
-    console.log(letters);
-
-    return letters;
-}).then(function(letters) {
+    return chapters;
+}).then(function (chapters) {
     console.log("Generating xml");
 
+    function processLine(line) {
+        if (lineType === 'new-paragraph') {
+            xml += "</p><lb/><p>";
+
+            // '<div><span style="font-weight: bold;">fett</span> <span style="font-style: italic;">ita<span style="font-weight: bold;">l</span>ic</span> normal</div>';
+
+            function format(node) {
+                let xml = '';
+
+                node.childNodes.forEach((node) => {
+                    switch (node.nodeType) {
+                        case "3":
+                            xml += node.textContent;
+                            break;
+
+                        default:
+                            // recursive
+                            if (font(node) === 'bold') {
+                                xml += '<hi redention="#f">' + format(node) + '</hi>';
+                            } else if (font(node) === 'italic') {
+                                // ...
+                            }
+                    }
+                });
+
+                return xml;
+            }
+
+            format(line);
+            console.log(line.textContent);
+        } else if (lineType === 'line') {
+            console.log(line.textContent);
+            paragraph.push(line.textContent);
+        } else if (lineType === 'line-number') {
+            // skip line numbers
+        } else {
+            // unknown line indent -> probably right aligned text
+            // does not detect indented text with left alignment
+            console.log(line.textContent);
+            paragraph.push(`<hi redention="#right">${line.textContent}</hi>`);
+        }
+    }
+
     // TODO: generate xml for letters
-    letters.forEach(function(letter) {
-        console.log(letter.paragraphs);
+    chapters.forEach(function (chapter) {
+        console.log("chapter: " + chapter.number);
+        chapter.letters.forEach((letter) => {
+            console.log("letter: " + letter.number);
+            console.log(letter);
+
+            // 1. letter.body to xml
+            letter.body.map((line) => processLine(line));
+
+            // 2. clean up apparatuses
+            // 3. clean up comments
+        });
     });
 }).catch(function (err) {
     console.log(err);
 });
+
+function isNewChapter(page) {
+    // gather chapters from excel list
+    // check if chapter is on page
+    return false;
+}
+
+function newChapter(number) {
+    return {
+        number,
+        letters: [],
+    };
+}
+
+function newLetter(number) {
+    return {
+        number,
+        title: [],
+        body: [],
+        apparatuses: [],
+        comments: [],
+    };
+}
+
+function type(line, leftMap) {
+    let left = Math.round(parseFloat(line.style.left));
+
+    return leftMap[left];
+}
+
+function font(node) {
+    if (node.classList.contains('ff1')) {
+        return 'italic';
+    }
+
+    if (node.classList.contains('ff3')) {
+        return 'bold';
+    }
+
+    return 'normal';
+}
