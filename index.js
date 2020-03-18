@@ -1,7 +1,7 @@
 const fs = require("fs");
 const Converter = require('pdftohtmljs');
 const inlineCSS = require('inline-css');
-const {jsdom} = require("jsdom");
+const {JSDOM} = require("jsdom");
 const {interpret} = require('xstate');
 
 if (process.argv.length < 3) {
@@ -15,7 +15,7 @@ let path = 'output';
 let outputFile = 'raw.html';
 
 // check if OS is Win, to use *.bat, else *.sh
-let bin = process.platform.toUpperCase().indexOf('WIN') >= 0 ? '.\\pdf2htmlEX.bat' : '.\\pdf2htmlEX.sh';
+let bin = process.platform.toUpperCase().includes('WIN') >= 0 ? '.\\pdf2htmlEX.bat' : '.\\pdf2htmlEX.sh';
 
 let pdf = Converter(input, outputFile, {
     bin,
@@ -70,7 +70,7 @@ pdf.convert().then(function () {
 }).then(function (html) {
     console.log("Parsing generated html data");
 
-    return new jsdom(html).window.document;
+    return new JSDOM(html).window.document;
 }).then(function (document) {
     console.log("Analysing document");
     console.log("");
