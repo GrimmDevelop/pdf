@@ -1,8 +1,7 @@
 const fs = require("fs");
 const Converter = require('pdftohtmljs');
 const inlineCSS = require('inline-css');
-const jsdom = require("jsdom");
-const {JSDOM} = jsdom;
+const {jsdom} = require("jsdom");
 const {interpret} = require('xstate');
 
 if (process.argv.length < 3) {
@@ -71,7 +70,7 @@ pdf.convert().then(function () {
 }).then(function (html) {
     console.log("Parsing generated html data");
 
-    return new JSDOM(html).window.document;
+    return new jsdom(html).window.document;
 }).then(function (document) {
     console.log("Analysing document");
     console.log("");
