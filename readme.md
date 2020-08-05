@@ -7,7 +7,7 @@
 
 ## Installation
 
-* run `chmod +x ./pdf2htmlEX.sh`
+* for linux: run `chmod +x ./pdf2htmlEX.sh`
 * run `npm ci`
 
 ## Usage
