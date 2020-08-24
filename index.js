@@ -15,7 +15,7 @@ let path = 'output';
 let outputFile = 'raw.html';
 
 // check if OS is Win, to use *.bat, else *.sh
-let bin = process.platform.toUpperCase().includes('WIN') >= 0 ? '.\\pdf2htmlEX.bat' : '.\\pdf2htmlEX.sh';
+let bin = process.platform.toLowerCase() === 'win32' ? '.\\pdf2htmlEX.bat' : '.\\pdf2htmlEX.sh';
 
 let pdf = Converter(input, outputFile, {
     bin,
