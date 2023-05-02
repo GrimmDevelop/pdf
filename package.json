@@ -4,10 +4,10 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
-    "inline-css": "^2.6.3",
-    "jsdom": "^16.2.1",
-    "pdftohtmljs": "^0.5.3",
-    "xstate": "^4.8.0"
+    "inline-css": "^4.0.2",
+    "jsdom": "^21.1.2",
+    "pdftohtmljs": "^0.6.0",
+    "xstate": "^4.37.2"
   },
   "devDependencies": {},
   "scripts": {

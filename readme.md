@@ -3,7 +3,7 @@
 ## Requirements
 
 * Docker
-* Node.js 13.10.0 or newer
+* Node.js 16 or newer
 
 ## Installation
 

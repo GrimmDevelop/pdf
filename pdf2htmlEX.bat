@@ -1,2 +1,2 @@
 
-docker run -i --rm -v "%cd%":/pdf bwits/pdf2htmlex pdf2htmlEX %*
+docker run -i --rm -v "%cd%":/pdf bwits/pdf2htmlex:1.0 pdf2htmlEX %*

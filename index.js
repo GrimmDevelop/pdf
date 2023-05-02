@@ -3,6 +3,7 @@ const Converter = require('pdftohtmljs');
 const inlineCSS = require('inline-css');
 const {JSDOM} = require("jsdom");
 const {interpret} = require('xstate');
+const {leftMap} = require("./structure");
 
 if (process.argv.length < 3) {
     console.log("please provide a valid pdf path");
@@ -26,7 +27,7 @@ pdf.add_options([
     "--dest-dir " + path,
     "--fit-width 968",
     "-f 187",
-    "-l 188",
+    "-l 191",
     "--optimize-text 5",
     "--printing 0",
     //"--embed-css 0",
@@ -103,6 +104,7 @@ pdf.convert().then(function () {
                     chapters.push(chapter);
                 }
 
+                console.log("creating chapter");
                 chapter = newChapter(state.context.chapter);
                 break;
 
@@ -205,61 +207,105 @@ pdf.convert().then(function () {
 }).then(function (chapters) {
     console.log("Generating xml");
 
-    function processLine(line) {
-        if (lineType === 'new-paragraph') {
-            xml += "</p><lb/><p>";
+    function format(node) {
+        let nodeXml = '';
 
-            // '<div><span style="font-weight: bold;">fett</span> <span style="font-style: italic;">ita<span style="font-weight: bold;">l</span>ic</span> normal</div>';
+        let spacerMode = false;
 
-            function format(node) {
-                let xml = '';
+        if (parseFloat(node.style.wordSpacing) > 1000) {
+            spacerMode = true;
+            console.log("enable alternate indentation mode");
 
-                node.childNodes.forEach((node) => {
-                    switch (node.nodeType) {
-                        case "3":
-                            xml += node.textContent;
-                            break;
+            nodeXml += '<hi redention="et10">';
+        }
 
-                        default:
-                            // recursive
-                            if (font(node) === 'bold') {
-                                xml += '<hi redention="#f">' + format(node) + '</hi>';
-                            } else if (font(node) === 'italic') {
-                                // ...
-                            }
+        node.childNodes.forEach((node) => {
+            switch (node.nodeType) {
+                case 3:
+                    if (node.textContent.trim() !== '') {
+                        nodeXml += node.textContent;
                     }
-                });
+                    break;
 
-                return xml;
+                default:
+                    // recursive
+                    if (font(node) === 'bold') {
+                        nodeXml += '<hi redention="#f">' + format(node) + '</hi>';
+                    } else if (font(node) === 'italic') {
+                        nodeXml += '<hi redention="#i">' + format(node) + '</hi>';
+                    } else if (spacerMode && parseFloat(node.style.marginLeft) < -1000) {
+                        console.log("nice");
+                    } else if (parseFloat(node.style.width) > 1000) {
+                        console.log("more spacing technics");
+                        if (nodeXml.trim() === '') {
+                            nodeXml += '<hi redention="et10">' + format(node);
+                            spacerMode = true;
+                        }
+                    } else {
+                        // TODO: set "letter needs attention" flag
+                        nodeXml += '<hi redention="#unknown">' + format(node) + '</hi>';
+                    }
             }
+        });
 
-            format(line);
-            console.log(line.textContent);
+        if (spacerMode) {
+            nodeXml += '</hi>';
+        }
+
+        return nodeXml;
+    }
+
+    function processLine(line) {
+        let lineXml = '';
+
+        let lineType = type(line, leftMap);
+        if (lineType === 'new-paragraph') {
+            lineXml += "</p>\n\n<p>\n";
+
+            lineXml += "<lb>" + format(line) + "</lb>\n";
         } else if (lineType === 'line') {
-            console.log(line.textContent);
-            paragraph.push(line.textContent);
+            lineXml += "<lb>" + format(line) + "<lb>\n";
         } else if (lineType === 'line-number') {
             // skip line numbers
         } else {
             // unknown line indent -> probably right aligned text
             // does not detect indented text with left alignment
-            console.log(line.textContent);
-            paragraph.push(`<hi redention="#right">${line.textContent}</hi>`);
+            // TODO: find best indentation
+            lineXml += `<lb><hi redention="#right">${line.textContent}</hi></lb>\n`;
         }
+
+        return lineXml;
     }
 
     // TODO: generate xml for letters
     chapters.forEach(function (chapter) {
         console.log("chapter: " + chapter.number);
         chapter.letters.forEach((letter) => {
-            console.log("letter: " + letter.number);
-            console.log(letter);
+            console.log("\n\n\n");
 
-            // 1. letter.body to xml
-            letter.body.map((line) => processLine(line));
+            console.log("Letter: " + letter.number);
+            console.log("\n");
 
-            // 2. clean up apparatuses
-            // 3. clean up comments
+            // 1. letter.title to xml
+            const titleXml = letter.title.map((node) => {
+                return node.textContent.trim();
+            }).join(' ');
+
+            // 2. letter.body to xml
+            let bodyXml = '<p>\n';
+
+            letter.body.forEach((line) => {
+                bodyXml += processLine(line);
+            });
+
+            bodyXml += "</p>";
+
+            letter.xml = `<letter><title>${titleXml}</title><body>${bodyXml}</body></letter>`;
+
+            console.log(letter.xml);
+
+            // 3. clean up apparatuses
+            // 4. clean up comments
         });
     });
 }).catch(function (err) {
@@ -286,6 +332,7 @@ function newLetter(number) {
         body: [],
         apparatuses: [],
         comments: [],
+        xml: ''
     };
 }
 
@@ -296,6 +343,10 @@ function type(line, leftMap) {
 }
 
 function font(node) {
+    if (!node.classList) {
+        return 'normal';
+    }
+
     if (node.classList.contains('ff1')) {
         return 'italic';
     }
