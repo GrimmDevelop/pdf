@@ -5,6 +5,8 @@ const {JSDOM} = require("jsdom");
 const {interpret} = require('xstate');
 const {leftMap} = require("./structure");
 
+var path = require('path');
+
 if (process.argv.length < 3) {
     console.log("please provide a valid pdf path");
     process.exit(1);
@@ -12,11 +14,11 @@ if (process.argv.length < 3) {
 
 let input = process.argv[2];
 
-let path = 'output';
+let outputPath = 'output';
 let outputFile = 'raw.html';
 
 // check if OS is Win, to use *.bat, else *.sh
-let bin = process.platform.toLowerCase() === 'win32' ? '.\\pdf2htmlEX.bat' : '.\\pdf2htmlEX.sh';
+let bin = process.platform.toLowerCase() === 'win32' ? '.\\pdf2htmlEX.bat' : path.resolve('.') + '/pdf2htmlEX.sh';
 
 let pdf = Converter(input, outputFile, {
     bin,
@@ -24,9 +26,9 @@ let pdf = Converter(input, outputFile, {
 
 // for testing only parse page 187 and 188
 pdf.add_options([
-    "--dest-dir " + path,
+    "--dest-dir " + outputPath,
     "--fit-width 968",
-    "-f 187",
+    "-f 49",
     "-l 191",
     "--optimize-text 5",
     "--printing 0",
@@ -36,11 +38,11 @@ pdf.add_options([
 ]);
 
 pdf.convert().then(function () {
-    console.log("Generated raw html output [" + path + "/" + outputFile + "]");
+    console.log("Generated raw html output [" + outputPath + "/" + outputFile + "]");
     console.log("Loading generated html.");
 
     return new Promise(function (resolve, reject) {
-        fs.readFile(path + "/" + outputFile, function (err, data) {
+        fs.readFile(outputPath + "/" + outputFile, function (err, data) {
             if (err) {
                 reject(err);
             } else {
@@ -55,7 +57,7 @@ pdf.convert().then(function () {
     return html
         .replace('<link rel="stylesheet" href="base.min.css"/>', '')
         .replace('<link rel="stylesheet" href="fancy.min.css"/>', '')
-        .replace('<link rel="stylesheet" href="document.css"/>', '<link rel="stylesheet" href="' + path + '/document.css"/>')
+        .replace('<link rel="stylesheet" href="document.css"/>', '<link rel="stylesheet" href="' + outputPath + '/document.css"/>')
         .replace('<div id="sidebar">\n<div id="outline">\n</div>\n</div>\n', '')
         .replace('<div class="pi" data-data=\'{"ctm":[1.330000,0.000000,0.000000,1.330000,0.000000,0.000000]}\'></div>', '');
 }).then(function (html) {
@@ -94,17 +96,20 @@ pdf.convert().then(function () {
     let chapters, chapter, letter, paragraph;
 
     const fetchService = interpret(fetchMachine).onTransition(state => {
-        console.log("transition to", state.value);
         switch (state.value) {
             case "start":
                 chapters = [];
                 break;
             case "chapter":
+                if (letter) {
+                    chapter.letters.push(letter);
+                    letter = null;
+                }
+
                 if (chapter) {
                     chapters.push(chapter);
                 }
 
-                console.log("creating chapter");
                 chapter = newChapter(state.context.chapter);
                 break;
 
@@ -129,7 +134,7 @@ pdf.convert().then(function () {
     }).start();
 
     // fake new chapter
-    fetchService.send('CHAPTER');
+    // fetchService.send('CHAPTER');
 
     // TODO:
     // use state machine (?)
@@ -149,7 +154,7 @@ pdf.convert().then(function () {
         let lineType = type(line, leftMap);
         let lineFont = font(line);
 
-        switch (fetchService.state.value) {
+        switch (fetchService.getSnapshot().value) {
             case "chapter":
             case "comments":
                 if (lineFont === 'bold' && lineType === 'line') {
@@ -179,24 +184,24 @@ pdf.convert().then(function () {
 
         if (isNewChapter(page)) {
             fetchService.send('CHAPTER');
+            return;
         }
 
-        console.log('');
-        console.log('=========== new page ===========');
+        // console.log('');
+        // console.log('=========== new page ===========');
 
         page.childNodes.forEach(function (line, index) {
             if (index < 2) { //TODO: is this always right?
-                console.log('page header or number');
+                // console.log('page header or number');
             } else {
                 // detect state change
                 checkLine(line);
 
-                // add line
-                if (letter.hasOwnProperty(fetchService.state.value)) {
-                    letter[fetchService.state.value].push(line);
-                }
+                const type = fetchService.getSnapshot().value.toString();
 
-                // processLine(line);
+                if (letter && letter.hasOwnProperty(type)) {
+                    letter[type].push(line);
+                }
             }
         });
     });
@@ -214,9 +219,9 @@ pdf.convert().then(function () {
 
         if (parseFloat(node.style.wordSpacing) > 1000) {
             spacerMode = true;
-            console.log("enable alternate indentation mode");
+            //console.log("enable alternate indentation mode");
 
-            nodeXml += '<hi redention="et10">';
+            nodeXml += '<hi redention="#et10">';
         }
 
         node.childNodes.forEach((node) => {
@@ -234,11 +239,11 @@ pdf.convert().then(function () {
                     } else if (font(node) === 'italic') {
                         nodeXml += '<hi redention="#i">' + format(node) + '</hi>';
                     } else if (spacerMode && parseFloat(node.style.marginLeft) < -1000) {
-                        console.log("nice");
+                        //console.log("nice");
                     } else if (parseFloat(node.style.width) > 1000) {
-                        console.log("more spacing technics");
+                        //console.log("more spacing technics");
                         if (nodeXml.trim() === '') {
-                            nodeXml += '<hi redention="et10">' + format(node);
+                            nodeXml += '<hi redention="#et10">' + format(node);
                             spacerMode = true;
                         }
                     } else {
@@ -264,7 +269,7 @@ pdf.convert().then(function () {
 
             lineXml += "<lb>" + format(line) + "</lb>\n";
         } else if (lineType === 'line') {
-            lineXml += "<lb>" + format(line) + "<lb>\n";
+            lineXml += "<lb>" + format(line) + "</lb>\n";
         } else if (lineType === 'line-number') {
             // skip line numbers
         } else {
@@ -281,15 +286,18 @@ pdf.convert().then(function () {
     chapters.forEach(function (chapter) {
         console.log("chapter: " + chapter.number);
         chapter.letters.forEach((letter) => {
-            console.log("\n\n\n");
+            //console.log("\n");
 
             console.log("Letter: " + letter.number);
-            console.log("\n");
+
+            //console.log("\n");
 
             // 1. letter.title to xml
             const titleXml = letter.title.map((node) => {
                 return node.textContent.trim();
             }).join(' ');
+
+            console.log(titleXml);
 
             // 2. letter.body to xml
             let bodyXml = '<p>\n';
@@ -302,7 +310,7 @@ pdf.convert().then(function () {
 
             letter.xml = `<letter><title>${titleXml}</title><body>${bodyXml}</body></letter>`;
 
-            console.log(letter.xml);
+            // console.log(letter.xml);
 
             // 3. clean up apparatuses
             // 4. clean up comments
@@ -313,8 +321,11 @@ pdf.convert().then(function () {
 });
 
 function isNewChapter(page) {
-    // gather chapters from excel list
-    // check if chapter is on page
+    // check if always correct "< 10"
+    if (page.childNodes.length < 10) {
+        return page.textContent.toLowerCase().includes("briefwechsel");
+    }
+
     return false;
 }
 
